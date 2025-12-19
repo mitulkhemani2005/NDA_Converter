@@ -13,6 +13,7 @@ export default function BharatDocsApp() {
   const [status, setStatus] = useState<Status>("idle")
   const [fileName, setFileName] = useState<string>("")
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [translatedBlob, setTranslatedBlob] = useState<Blob | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,11 +52,14 @@ export default function BharatDocsApp() {
 
       const blob = await translateRes.blob()
 
-      // Trigger download of the processed file
+      // Keep the translated blob in state so the Download button can use it
+      setTranslatedBlob(blob)
+
+      // Trigger download of the processed file (immediate) — also keep blob for later downloads
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `translated_${fileName || "document"}`
+      a.download = `translated_${fileName || "document"}.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -70,11 +74,13 @@ export default function BharatDocsApp() {
   }
 
   const handleDownload = () => {
-    if (uploadedFile) {
-      const url = URL.createObjectURL(uploadedFile)
+    const fileOrBlob = translatedBlob ?? uploadedFile
+    if (fileOrBlob) {
+      const url = URL.createObjectURL(fileOrBlob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `processed_${fileName}`
+      // Prefer translated filename when available
+      a.download = translatedBlob ? `translated_${fileName || "document"}.pdf` : `processed_${fileName}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -86,6 +92,7 @@ export default function BharatDocsApp() {
     setStatus("idle")
     setFileName("")
     setUploadedFile(null)
+    setTranslatedBlob(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }

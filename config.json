@@ -7,6 +7,14 @@
     {
       "name": "rectangle2",
       "rect": [33, 81, 296, 90]
+    },
+    {
+      "name": "rectangle3",
+      "rect": [96, 484, 296, 495]
+    },
+    {
+      "name": "rectangle4",
+      "rect": [33, 497, 296, 504]
     }
   ]
 }
