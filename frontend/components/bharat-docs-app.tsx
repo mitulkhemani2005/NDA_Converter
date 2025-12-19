@@ -111,9 +111,9 @@ export default function BharatDocsApp() {
         {/* Logo & Title */}
         <div className="text-center animate-fade-in">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <FileText className="w-10 h-10 text-orange-500 animate-bounce" style={{ animationDuration: "2s" }} />
+            <FileText className="w-10 h-10 text-orange-500" style={{ animationDuration: "2s" }} />
             <h1 className="text-4xl font-bold text-gray-900 tracking-tight">
-              Bharat<span className="text-orange-500">Docs</span>
+              NDA <span className="text-orange-500">Docs</span>
             </h1>
           </div>
           <p className="text-gray-500 text-sm animate-fade-in" style={{ animationDelay: "0.2s" }}>
@@ -201,14 +201,26 @@ export default function BharatDocsApp() {
         </Card>
 
         {/* Footer */}
-        <div className="text-center mt-4 animate-fade-in" style={{ animationDelay: "0.4s" }}>
-          <p className="text-gray-400 text-xs">
-            Made with ❤️ by <span className="font-medium text-gray-600">Mitul Khemani</span>
-          </p>
-          <p className="text-gray-400 text-xs mt-1">
-            for <span className="font-medium text-orange-500">New Durga Agencies</span>, Ujjain
-          </p>
-        </div>
+        <footer className="w-full mt-6 animate-fade-in text-center text-sm text-gray-500" style={{ animationDelay: "0.4s" }}>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+            <p>
+              Built by <a className="font-medium text-gray-700 hover:underline" href="https://mitul-khemani-portfolio.vercel.app/">Mitul Khemani</a>
+            </p>
+            <span className="hidden sm:inline text-gray-300">•</span>
+            <p>
+              for <span className="font-medium text-orange-500">New Durga Agencies</span>, Ujjain
+            </p>
+          </div>
+
+          <p className="mt-2 text-xs text-gray-400">© {new Date().getFullYear()} All rights reserved.</p>
+        </footer>
+      </div>
+
+      {/* Fixed Terms box (bottom-left) — positioned out of document flow so layout/background remain unchanged */}
+      <div className="fixed left-4 bottom-4 z-50 bg-white bg-opacity-95 border border-gray-100 rounded-md shadow-md p-3 max-w-xs text-xs text-gray-700">
+        <h3 className="text-sm font-semibold mb-1">Terms and Condition</h3>
+        <p className="leading-tight">1. This tool is provided to help with document processing. It may produce errors so, please verify all results before relying on them.</p>
+        <p className="mt-1 leading-tight">2. Any Error caused will be completely fault of the user. Mitul Khemani will not be responsible for any errors.</p>
       </div>
 
       <style jsx>{`
