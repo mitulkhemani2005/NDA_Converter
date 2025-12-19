@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Upload, Download, FileText, CheckCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -15,6 +15,19 @@ export default function BharatDocsApp() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [translatedBlob, setTranslatedBlob] = useState<Blob | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+
+  const blobToDataUrl = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error("Failed to read blob"))
+      reader.readAsDataURL(blob)
+    })
+
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -73,6 +86,30 @@ export default function BharatDocsApp() {
     }
   }
 
+  const handlePreview = async () => {
+    try {
+      if (!translatedBlob) return
+      // Use object URL for fast iframe rendering
+      const url = URL.createObjectURL(translatedBlob)
+      // Revoke previous preview URL if any
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(url)
+      setShowPreview(true)
+    } catch (e) {
+      console.error("Preview failed", e)
+    }
+  }
+
+  const closePreview = () => {
+    setShowPreview(false)
+    if (previewUrl) {
+      try {
+        URL.revokeObjectURL(previewUrl)
+      } catch {}
+      setPreviewUrl(null)
+    }
+  }
+
   const handleDownload = () => {
     const fileOrBlob = translatedBlob ?? uploadedFile
     if (fileOrBlob) {
@@ -93,10 +130,22 @@ export default function BharatDocsApp() {
     setFileName("")
     setUploadedFile(null)
     setTranslatedBlob(null)
+    closePreview()
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
   }
+
+  // cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        try {
+          URL.revokeObjectURL(previewUrl)
+        } catch {}
+      }
+    }
+  }, [previewUrl])
 
   return (
     <div className="h-screen w-screen bg-white flex flex-col items-center justify-center overflow-hidden p-4">
@@ -196,6 +245,13 @@ export default function BharatDocsApp() {
                   Download PDF
                 </Button>
                 <Button
+                  onClick={handlePreview}
+                  variant="outline"
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50 transition-all duration-300 bg-transparent"
+                >
+                  Preview
+                </Button>
+                <Button
                   onClick={handleReset}
                   variant="outline"
                   className="border-gray-300 text-gray-600 hover:bg-gray-50 transition-all duration-300 bg-transparent"
@@ -206,6 +262,50 @@ export default function BharatDocsApp() {
             </div>
           )}
         </Card>
+
+        {/* Inline Modal Preview */}
+        {showPreview && previewUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={closePreview} />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-5xl w-[90%] h-[85vh] overflow-hidden transform transition-all duration-300 scale-100">
+              <div className="flex items-center justify-between p-3 border-b">
+                <div className="text-sm font-medium">Preview — {fileName || "translated_document.pdf"}</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-1 rounded bg-white border text-sm"
+                    onClick={() => {
+                      try {
+                        iframeRef.current?.contentWindow?.focus()
+                        iframeRef.current?.contentWindow?.print()
+                      } catch (e) {
+                        window.open(previewUrl)?.print()
+                      }
+                    }}
+                  >
+                    Print
+                  </button>
+                  <button
+                    className="px-3 py-1 rounded bg-white border text-sm"
+                    onClick={() => {
+                      const a = document.createElement("a")
+                      a.href = previewUrl
+                      a.download = `translated_${fileName || "document"}.pdf`
+                      document.body.appendChild(a)
+                      a.click()
+                      a.remove()
+                    }}
+                  >
+                    Download
+                  </button>
+                  <button className="px-3 py-1 rounded bg-white border text-sm" onClick={closePreview}>
+                    Close
+                  </button>
+                </div>
+              </div>
+              <iframe ref={iframeRef} src={previewUrl} className="w-full h-[calc(100%-48px)]" />
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <footer className="w-full mt-6 animate-fade-in text-center text-sm text-gray-500" style={{ animationDelay: "0.4s" }}>
@@ -227,7 +327,7 @@ export default function BharatDocsApp() {
       <div className="fixed left-4 bottom-4 z-50 bg-white bg-opacity-95 border border-gray-100 rounded-md shadow-md p-3 max-w-xs text-xs text-gray-700">
         <h3 className="text-sm font-semibold mb-1">Terms and Condition</h3>
         <p className="leading-tight">1. This tool is provided to help with document processing. It may produce errors so, please verify all results before relying on them.</p>
-        <p className="mt-1 leading-tight">2. Any Error caused will be completely fault of the user. Mitul Khemani will not be responsible for any errors.</p>
+        <p className="mt-1 leading-tight">2. Any error caused will be completely fault of the user. Mitul Khemani will not be responsible for any errors.</p>
       </div>
 
       <style jsx>{`
