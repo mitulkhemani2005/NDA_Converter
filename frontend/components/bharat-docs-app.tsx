@@ -68,16 +68,8 @@ export default function BharatDocsApp() {
       // Keep the translated blob in state so the Download button can use it
       setTranslatedBlob(blob)
 
-      // Trigger download of the processed file (immediate) — also keep blob for later downloads
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `translated_${fileName || "document"}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
+      // Keep the translated blob in state for manual download/preview
+      // Do not automatically trigger a download — user can click Download or Preview
       setStatus("complete")
     } catch (err) {
       console.error(err)
