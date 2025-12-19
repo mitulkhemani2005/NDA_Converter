@@ -1,33 +1,90 @@
 import fitz  # PyMuPDF
 import os
 
-# ---- FONT CONFIG (LOCKED) ----
+# ================= FONT CONFIG =================
 FONT_NAME = "NotoSansDevanagari"
 FONT_PATH = "fonts/NotoSansDevanagari-Regular.ttf"
 
-# Safety check (fail fast if font missing)
 if not os.path.exists(FONT_PATH):
     raise FileNotFoundError(f"Hindi font not found at {FONT_PATH}")
 
 
+# ================= BBOX UTILS =================
 def pad_bbox(bbox, padding_top=2, padding_bottom=14):
     """
-    Expands the bounding box vertically to accommodate Hindi (Devanagari)
-    characters which require more vertical space.
+    Padding ONLY for Hindi text height.
+    Overlay rectangle must NEVER use padded bbox.
     """
     x0, y0, x1, y1 = bbox
     return (x0, y0 - padding_top, x1, y1 + padding_bottom)
 
 
+# ================= TEXT INSERT =================
+def insert_centered_text(page, bbox, text):
+    """
+    Inserts Hindi text exactly once, centered horizontally and vertically.
+    Uses Shape for dry-run measurement to avoid duplicate rendering.
+    """
+
+    x0, y0, x1, y1 = bbox
+
+    fitted_font_size = None
+    unused_space = None
+
+    # -------- Pass 1: Measure using Shape (NO DRAW) --------
+    for font_size in range(10, 5, -1):
+        shape = page.new_shape()
+        rc = shape.insert_textbox(
+            bbox,
+            text,
+            fontsize=font_size,
+            fontname=FONT_NAME,
+            fontfile=FONT_PATH,
+            align=fitz.TEXT_ALIGN_CENTER
+        )
+        # DO NOT COMMIT SHAPE
+        if rc >= 0:
+            fitted_font_size = font_size
+            unused_space = rc
+            break
+
+    if fitted_font_size is None:
+        return False
+
+    # -------- Vertical centering --------
+    vertical_shift = unused_space / 2
+
+    centered_bbox = (
+        x0,
+        y0 + vertical_shift,
+        x1,
+        y1
+    )
+
+    # -------- Pass 2: Final render (ONLY ONCE) --------
+    page.insert_textbox(
+        centered_bbox,
+        text,
+        fontsize=fitted_font_size,
+        fontname=FONT_NAME,
+        fontfile=FONT_PATH,
+        color=(0, 0, 0),
+        align=fitz.TEXT_ALIGN_CENTER
+    )
+
+    return True
+
+
+# ================= MAIN MODIFIER =================
 def apply_translations_to_pdf(
     input_pdf_path,
     output_pdf_path,
     translated_regions
 ):
     """
-    Applies Hindi translations to the PDF by:
-    1. Covering original English text with a white rectangle
-    2. Writing Hindi text inside the same (padded) region
+    FINAL RULES:
+    - Overlay rectangle uses EXACT config.json coordinates
+    - Hindi text is rendered ONCE and centered correctly
     """
 
     doc = fitz.open(input_pdf_path)
@@ -43,41 +100,31 @@ def apply_translations_to_pdf(
             if not hindi_text:
                 continue
 
-            # Original bbox from config
-            original_bbox = region["rect"]
+            # 1️⃣ Exact rectangle from config.json
+            original_bbox = tuple(region["rect"])
 
-            # Pad bbox for Hindi text height
-            bbox = pad_bbox(original_bbox)
+            # 2️⃣ Padded bbox ONLY for Hindi text
+            text_bbox = pad_bbox(original_bbox)
 
-            # 1. Hide English text
+            # 3️⃣ Erase English text (NO BORDER)
             page.draw_rect(
-                bbox,
+                original_bbox,
                 fill=(1, 1, 1),
-                color = None,
+                color=None,
                 overlay=True
             )
 
-            # 2. Insert Hindi text (guaranteed fit logic)
-            inserted = False
-            for font_size in range(10, 5, -1):
-                rc = page.insert_textbox(
-                    bbox,
-                    hindi_text,
-                    fontsize=font_size,
-                    fontname=FONT_NAME,
-                    fontfile=FONT_PATH,
-                    color=(0, 0, 0),
-                    align=fitz.TEXT_ALIGN_CENTER
-                )
-                if rc >= 0:
-                    inserted = True
-                    break
+            # 4️⃣ Insert Hindi text ONCE
+            success = insert_centered_text(
+                page=page,
+                bbox=text_bbox,
+                text=hindi_text
+            )
 
-            # Fail-safe: log if text could not be inserted
-            if not inserted:
+            if not success:
                 print(
-                    f"[WARN] Hindi text did not fit on page {page_index} "
-                    f"for region {region.get('region_name')}"
+                    f"[WARN] Hindi text did not fit "
+                    f"(page={page_index}, region={region.get('region_name')})"
                 )
 
     doc.save(output_pdf_path)
