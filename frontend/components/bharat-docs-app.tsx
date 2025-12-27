@@ -47,34 +47,21 @@ export default function BharatDocsApp() {
       const form = new FormData()
       form.append("file", file)
 
-      const uploadRes = await fetch(`${apiBase}/upload`, {
-        method: "POST",
-        body: form,
-      })
-
-      if (!uploadRes.ok) throw new Error("Upload failed")
-
-      setStatus("processing")
-
-      // Request server to translate/process the uploaded PDF and return the result
+      // Send the file directly to the backend translate endpoint
       const translateRes = await fetch(`${apiBase}/translate-pdf`, {
         method: "POST",
+        body: form,
       })
 
       if (!translateRes.ok) throw new Error("Processing failed")
 
       const blob = await translateRes.blob()
 
-      // Keep the translated blob in state so the Download button can use it
       setTranslatedBlob(blob)
-
-      // Keep the translated blob in state for manual download/preview
-      // Do not automatically trigger a download — user can click Download or Preview
       setStatus("complete")
     } catch (err) {
       console.error(err)
       setStatus("idle")
-      // Optionally show user-facing error here
     }
   }
 
