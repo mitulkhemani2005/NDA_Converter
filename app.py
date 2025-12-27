@@ -1,8 +1,6 @@
 import os
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
-
 from pdf_reader import get_pdf_info
 from config_loader import load_config
 from region_text_extractor import extract_text_from_regions
@@ -10,41 +8,23 @@ from region_translator import translate_regions
 from pdf_modifier import apply_translations_to_pdf
 
 
-# -----------------------------
-# App setup
-# -----------------------------
+
 app = Flask(__name__)
 CORS(app)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-ALLOWED_EXTENSIONS = {"pdf"}
+UPLOAD_FOLDER = "uploads"
+def clear_uploads_folder():
+    for filename in os.listdir(UPLOAD_FOLDER):
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
-
-# -----------------------------
-# Utility functions
-# -----------------------------
-def ensure_upload_folder():
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-# -----------------------------
-# Health check
-# -----------------------------
-@app.route("/", methods=["GET"])
+@app.route("/")
 def index():
-    return jsonify({"status": "PDF Translation Service is running"})
+    return "PDF Upload Service is running."
 
-
-# -----------------------------
-# Verify PDF (stateless)
-# -----------------------------
-@app.route("/verify-pdf", methods=["POST"])
-def verify_pdf():
+@app.route("/upload", methods=["POST"])
+def upload_pdf():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -53,94 +33,95 @@ def verify_pdf():
     if file.filename == "":
         return jsonify({"error": "Empty filename"}), 400
 
-    if not allowed_file(file.filename):
-        return jsonify({"error": "Only PDF files allowed"}), 400
+    clear_uploads_folder()
 
-    ensure_upload_folder()
-
-    input_path = os.path.join(UPLOAD_FOLDER, "verify_input.pdf")
-    file.save(input_path)
-
-    info = get_pdf_info(input_path)
+    save_path = os.path.join(UPLOAD_FOLDER, "input.pdf")
+    file.save(save_path)
 
     return jsonify({
-        "page_count": info.get("page_count"),
-        "is_encrypted": info.get("is_encrypted")
+        "message": "PDF uploaded successfully",
+        "file_path": save_path
     })
 
 
-# -----------------------------
-# Translate PDF (MAIN ENDPOINT)
-# -----------------------------
+@app.route("/verify-pdf", methods=["GET"])
+def verify_pdf():
+    pdf_path = "uploads/input.pdf"
+
+    if not os.path.exists(pdf_path):
+        return jsonify({"error": "No PDF found"}), 404
+
+    info = get_pdf_info(pdf_path)
+
+    return jsonify({
+        "message": "PDF verified successfully",
+        "page_count": info["page_count"],
+        "is_encrypted": info["is_encrypted"]
+    })
+
+@app.route("/extract-regions", methods=["GET"])
+def extract_regions():
+    pdf_path = "uploads/input.pdf"
+
+    if not os.path.exists(pdf_path):
+        return jsonify({"error": "No PDF uploaded"}), 404
+
+    config = load_config()
+    regions = config.get("all_pages", [])
+
+    extracted = extract_text_from_regions(pdf_path, regions)
+
+    return jsonify({
+        "message": "Region-based extraction successful",
+        "regions": extracted
+    })
+
+
+@app.route("/translate-regions", methods=["GET"])
+def translate_regions_api():
+    pdf_path = "uploads/input.pdf"
+
+    if not os.path.exists(pdf_path):
+        return jsonify({"error": "No PDF uploaded"}), 404
+
+    config = load_config()
+    regions = config.get("all_pages", [])
+
+    extracted = extract_text_from_regions(pdf_path, regions)
+    translated = translate_regions(extracted)
+
+    return jsonify({
+        "message": "Region translation successful",
+        "data": translated
+    })
+
 @app.route("/translate-pdf", methods=["POST"])
 def translate_pdf():
-    try:
-        if "file" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+    pdf_path = "uploads/input.pdf"
+    output_path = "uploads/output.pdf"
 
-        file = request.files["file"]
+    if not os.path.exists(pdf_path):
+        return jsonify({"error": "No PDF uploaded"}), 404
 
-        if file.filename == "":
-            return jsonify({"error": "Empty filename"}), 400
+    config = load_config()
+    regions = config.get("all_pages", [])
 
-        if not allowed_file(file.filename):
-            return jsonify({"error": "Only PDF files allowed"}), 400
+    extracted = extract_text_from_regions(pdf_path, regions)
+    translated = translate_regions(extracted)
 
-        ensure_upload_folder()
+    apply_translations_to_pdf(
+        input_pdf_path=pdf_path,
+        output_pdf_path=output_path,
+        translated_regions=translated
+    )
 
-        input_path = os.path.join(UPLOAD_FOLDER, "input.pdf")
-        output_path = os.path.join(UPLOAD_FOLDER, "output.pdf")
-
-        # Save uploaded PDF
-        file.save(input_path)
-
-        # Load configuration
-        config = load_config()
-        if not isinstance(config, dict):
-            return jsonify({"error": "Invalid config file"}), 500
-
-        regions = config.get("all_pages", [])
-
-        # Extract text
-        extracted = extract_text_from_regions(input_path, regions)
-        if not extracted:
-            return jsonify({"error": "Text extraction failed"}), 500
-
-        # Translate text
-        translated = translate_regions(extracted)
-        if not translated:
-            return jsonify({"error": "Translation failed"}), 500
-
-        # Apply translations to PDF
-        apply_translations_to_pdf(
-            input_pdf_path=input_path,
-            output_pdf_path=output_path,
-            translated_regions=translated
-        )
-
-        if not os.path.exists(output_path):
-            return jsonify({"error": "Output PDF not generated"}), 500
-
-        return send_file(
-            output_path,
-            as_attachment=True,
-            download_name="translated_bill.pdf",
-            mimetype="application/pdf"
-        )
-
-    except Exception as e:
-        return jsonify({
-            "error": "Internal server error",
-            "details": str(e)
-        }), 500
+    return send_file(
+        output_path,
+        as_attachment=True,
+        download_name="translated_bill.pdf"
+    )
 
 
-# -----------------------------
-# Entry point (Render + Local)
-# -----------------------------
 if __name__ == "__main__":
-    ensure_upload_folder()
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-    # For local development, use:   
-    
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    app.run(debug=True)
